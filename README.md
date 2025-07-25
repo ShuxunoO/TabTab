@@ -1,2 +1,2 @@
 # TabTab
-AI powered Input method
+TabTab - Copilot of the Input Method, Your Personal Voice Assistant
