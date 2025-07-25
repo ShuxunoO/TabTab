@@ -103,6 +103,18 @@ class InputManager(QObject):
             # 检查是否应该阻止按键
             suppress_key = self.should_suppress_key(key)
             
+            # 处理数字键（选择候选词）
+            if is_digit_char(key):
+                if self.is_active and self.candidates:
+                    digit = int(get_key_char(key))
+                    print(f"Digit key pressed: {digit}")
+                    if 1 <= digit <= len(self.candidates):
+                        print(f"Selecting candidate {digit-1}: {self.candidates[digit-1]}")
+                        self.select_candidate(digit - 1)
+                        return True  # 阻止数字键传播
+                # 如果输入法未激活或没有候选词，则不处理，让数字键正常输入
+                return False
+
             # 处理字母键（拼音输入）
             if is_alpha_char(key):
                 char = get_key_char(key).lower()
@@ -111,17 +123,6 @@ class InputManager(QObject):
                 self.is_active = True
                 print(f"Added char '{char}' to buffer: '{self.pinyin_buffer}'")
                 return suppress_key
-            
-            # 处理数字键（选择候选词）
-            elif is_digit_char(key):
-                digit = int(get_key_char(key))
-                print(f"Digit key pressed: {digit}")
-                if self.is_active and self.candidates and 1 <= digit <= len(self.candidates):
-                    print(f"Selecting candidate {digit-1}: {self.candidates[digit-1]}")
-                    self.select_candidate(digit - 1)
-                    return True  # 阻止数字键传播
-                else:
-                    print(f"Digit key not handled - Active: {self.is_active}, Candidates: {len(self.candidates)}")
             
             # 处理Tab键（确认第一个候选词）
             elif key == keyboard.Key.tab:

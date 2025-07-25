@@ -176,7 +176,18 @@ def is_digit_char(key) -> bool:
         如果是数字字符则返回True
     """
     try:
-        return hasattr(key, 'char') and key.char and key.char.isdigit()
+        # 处理 pynput.keyboard.KeyCode
+        if hasattr(key, 'char') and key.char and key.char.isdigit():
+            return True
+        # 处理 pynput.keyboard.Key (例如 numpad 数字)
+        if hasattr(key, 'name') and key.name and key.name.startswith('num_'):
+            return key.name.split('_')[1].isdigit()
+        # 兼容 vk
+        if hasattr(key, 'vk') and 48 <= key.vk <= 57: # 主键盘数字 0-9
+            return True
+        if hasattr(key, 'vk') and 96 <= key.vk <= 105: # 小键盘数字 0-9
+            return True
+        return False
     except:
         return False
 
@@ -193,6 +204,12 @@ def get_key_char(key) -> str:
     try:
         if hasattr(key, 'char') and key.char:
             return key.char
+        # 兼容 vk for numpad
+        if hasattr(key, 'vk') and 96 <= key.vk <= 105:
+            return str(key.vk - 96)
+        # 兼容 vk for main keyboard
+        if hasattr(key, 'vk') and 48 <= key.vk <= 57:
+            return str(key.vk - 48)
     except:
         pass
     return ""
