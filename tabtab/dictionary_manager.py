@@ -104,10 +104,8 @@ class DictionaryManager:
                 for hanzi in hanzi_list:
                     if hanzi not in candidates:
                         candidates.append(hanzi)
-                        if len(candidates) >= max_count:
-                            return candidates
         
-        return candidates
+        return candidates[:max_count] if max_count > 0 else candidates
 
 
 if __name__ == '__main__':

@@ -68,7 +68,7 @@ class PinyinEngine:
         candidates.extend(segmented_candidates)
         
         # 2. 检查自定义词典
-        dict_candidates = self.dict_manager.get_candidates(pinyin_str, 5)
+        dict_candidates = self.dict_manager.get_candidates(pinyin_str, -1)  # 获取所有候选词
         candidates.extend(dict_candidates)
         
         # 3. 使用pypinyin获取单字候选
@@ -76,8 +76,8 @@ class PinyinEngine:
             # 获取每个字符的拼音
             result = pinyin(pinyin_str, style=Style.NORMAL, heteronym=True)
             if result:
-                # 简单处理：取第一个字符的所有可能读音
-                for char_pinyins in result[:1]:  # 只处理第一个字符
+                # 处理所有可能的读音
+                for char_pinyins in result:
                     for char_pinyin in char_pinyins:
                         if char_pinyin not in candidates:
                             candidates.append(char_pinyin)
@@ -113,7 +113,7 @@ class PinyinEngine:
                 if word not in candidates:
                     candidates.append(word)
         
-        # 去重并保持顺序，返回前8个结果
+        # 去重并保持顺序
         seen = set()
         unique_candidates = []
         for candidate in candidates:
@@ -121,7 +121,7 @@ class PinyinEngine:
                 seen.add(candidate)
                 unique_candidates.append(candidate)
         
-        return unique_candidates[:8]
+        return unique_candidates  # 返回所有候选词，不限制数量
 
 
 if __name__ == '__main__':

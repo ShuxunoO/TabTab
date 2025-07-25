@@ -17,6 +17,8 @@ class CandidateWindow(QWidget):
     
     # 信号：当用户点击候选词时发出
     candidate_selected = pyqtSignal(int)
+    # 信号：请求翻页（1为下一页，-1为上一页）
+    page_change_requested = pyqtSignal(int)
     
     def __init__(self, parent=None):
         """初始化候选词窗口。"""
@@ -24,6 +26,8 @@ class CandidateWindow(QWidget):
         self.candidates: List[str] = []
         self.selected_index = 0
         self.drag_position = QPoint()
+        self.current_page = 0
+        self.total_pages = 1
         
         self.setup_ui()
         self.setup_style()
@@ -85,16 +89,20 @@ class CandidateWindow(QWidget):
                 font-weight: bold;
             }
         """)
-    def update_candidates(self, candidates: List[str]):
+    def update_candidates(self, candidates: List[str], current_page: int = 0, total_pages: int = 1):
         """更新候选词列表。
         
         Args:
             candidates: 候选词列表
+            current_page: 当前页码
+            total_pages: 总页数
         """
         self.candidates = candidates
         self.selected_index = 0
+        self.current_page = current_page
+        self.total_pages = total_pages
         
-        print(f"Updating candidates: {candidates}")
+        print(f"Updating candidates: {candidates}, Page: {current_page+1}/{total_pages}")
         
         # 清除现有的候选词标签
         for label in self.candidate_labels:
@@ -114,6 +122,14 @@ class CandidateWindow(QWidget):
             self.candidate_labels.append(label)
             self.candidate_layout.addWidget(label)
         
+        # 添加页码信息
+        if total_pages > 1:
+            page_info = QLabel(f"[{current_page+1}/{total_pages}]")
+            page_info.setObjectName("page_info")
+            page_info.setStyleSheet("color: #444; font-size: 10pt;")
+            self.candidate_labels.append(page_info)
+            self.candidate_layout.addWidget(page_info)
+        
         # 高亮第一个候选词
         self.update_selection()
         
@@ -126,6 +142,10 @@ class CandidateWindow(QWidget):
     def update_selection(self):
         """更新选中状态的显示。"""
         for i, label in enumerate(self.candidate_labels):
+            # 跳过页码信息标签
+            if label.objectName() == "page_info":
+                continue
+                
             if i == self.selected_index:
                 label.setProperty("class", "selected")
             else:
@@ -133,17 +153,48 @@ class CandidateWindow(QWidget):
             label.style().unpolish(label)
             label.style().polish(label)
     
-    def select_next(self):
-        """选择下一个候选词。"""
-        if self.candidates and self.selected_index < len(self.candidates) - 1:
+    def select_next(self) -> bool:
+        """选择下一个候选词。
+        
+        Returns:
+            如果已经是最后一个则返回True，否则返回False
+        """
+        if self.selected_index < len(self.candidates) - 1:
             self.selected_index += 1
             self.update_selection()
+            return False
+        return True  # 已到达列表末尾
     
-    def select_previous(self):
-        """选择上一个候选词。"""
-        if self.candidates and self.selected_index > 0:
+    def select_previous(self) -> bool:
+        """选择上一个候选词。
+        
+        Returns:
+            如果已经是第一个则返回True，否则返回False
+        """
+        if self.selected_index > 0:
             self.selected_index -= 1
             self.update_selection()
+            return False
+        return True  # 已到达列表开头
+    
+    def select_first(self):
+        """选择第一个候选词。"""
+        self.selected_index = 0
+        self.update_selection()
+    
+    def select_last(self):
+        """选择最后一个候选词。"""
+        if self.candidates:
+            self.selected_index = len(self.candidates) - 1
+            self.update_selection()
+    
+    def is_at_beginning(self) -> bool:
+        """检查是否在列表开头。"""
+        return self.selected_index == 0
+    
+    def is_at_end(self) -> bool:
+        """检查是否在列表末尾。"""
+        return self.selected_index == len(self.candidates) - 1
     
     def get_selected_candidate(self) -> str:
         """获取当前选中的候选词。
@@ -206,10 +257,18 @@ class CandidateWindow(QWidget):
         """处理键盘事件。"""
         key = event.key()
         
-        if key == Qt.Key.Key_Down or key == Qt.Key.Key_Right:
+        if key == Qt.Key.Key_Down:
             self.select_next()
-        elif key == Qt.Key.Key_Up or key == Qt.Key.Key_Left:
+        elif key == Qt.Key.Key_Up:
             self.select_previous()
+        elif key == Qt.Key.Key_Right:
+            # 向右移动选择，如果到达末尾发出翻页信号
+            if self.select_next():
+                self.page_change_requested.emit(1)  # 请求下一页
+        elif key == Qt.Key.Key_Left:
+            # 向左移动选择，如果到达开头发出翻页信号
+            if self.select_previous():
+                self.page_change_requested.emit(-1)  # 请求上一页
         elif key == Qt.Key.Key_Return or key == Qt.Key.Key_Enter:
             if self.candidates:
                 self.candidate_selected.emit(self.selected_index)

@@ -32,6 +32,9 @@ class InputManager(QObject):
         # 输入状态
         self.pinyin_buffer = ""  # 拼音缓冲区
         self.candidates: List[str] = []  # 当前候选词
+        self.full_candidates: List[str] = []  # 完整候选词列表
+        self.current_page = 0  # 当前页码
+        self.page_size = 5  # 每页显示数量
         self.is_active = False  # 输入法是否激活
         self.suppress_next_key = False  # 是否阻止下一个按键
         
@@ -41,6 +44,7 @@ class InputManager(QObject):
         
         # 连接候选词窗口信号
         self.candidate_window.candidate_selected.connect(self.on_candidate_selected)
+        self.candidate_window.page_change_requested.connect(self.handle_page_change)
         
         # 设置pyautogui的延迟，提高输入速度
         pyautogui.PAUSE = 0.01
@@ -79,6 +83,10 @@ class InputManager(QObject):
             # 阻止Tab键、空格键、回车键
             if key in [keyboard.Key.tab, keyboard.Key.space, keyboard.Key.enter]:
                 return True
+
+            # 阻止方向键
+            if key in [keyboard.Key.left, keyboard.Key.right, keyboard.Key.up, keyboard.Key.down]:
+                return True
         
         # 如果输入法激活，阻止字母键
         if self.is_active and is_alpha_char(key):
@@ -89,6 +97,42 @@ class InputManager(QObject):
             return True
             
         return False
+    
+    def next_page(self) -> bool:
+        """翻到下一页。
+        
+        Returns:
+            成功翻页返回True，否则返回False
+        """
+        max_page = (len(self.full_candidates) + self.page_size - 1) // self.page_size - 1
+        if self.current_page < max_page:
+            self.current_page += 1
+            self.show_current_page_candidates()
+            return True
+        return False
+    
+    def previous_page(self) -> bool:
+        """翻到上一页。
+        
+        Returns:
+            成功翻页返回True，否则返回False
+        """
+        if self.current_page > 0:
+            self.current_page -= 1
+            self.show_current_page_candidates()
+            return True
+        return False
+        
+    def handle_page_change(self, direction: int):
+        """处理页面变更请求。
+        
+        Args:
+            direction: 1表示下一页，-1表示上一页
+        """
+        if direction > 0:
+            self.next_page()
+        else:
+            self.previous_page()
     
     def on_key_press(self, key):
         """处理键盘按下事件。
@@ -123,6 +167,45 @@ class InputManager(QObject):
                 self.is_active = True
                 print(f"Added char '{char}' to buffer: '{self.pinyin_buffer}'")
                 return suppress_key
+            
+            # 处理方向键（选择候选词和翻页）
+            elif key == keyboard.Key.left:
+                if self.is_active:
+                    if self.candidate_window.is_at_beginning():
+                        # 在候选词列表开头，尝试翻到上一页
+                        if self.previous_page():
+                            # 如果成功翻页，选择新页的最后一项
+                            self.candidate_window.select_last()
+                    else:
+                        # 不在开头，选择上一个候选词
+                        self.candidate_window.select_previous()
+                    return True
+                return False
+                
+            elif key == keyboard.Key.right:
+                if self.is_active:
+                    if self.candidate_window.is_at_end():
+                        # 在候选词列表末尾，尝试翻到下一页
+                        if self.next_page():
+                            # 如果成功翻页，选择新页的第一项
+                            self.candidate_window.select_first()
+                    else:
+                        # 不在末尾，选择下一个候选词
+                        self.candidate_window.select_next()
+                    return True
+                return False
+                
+            elif key == keyboard.Key.up:
+                if self.is_active:
+                    self.candidate_window.select_previous()
+                    return True
+                return False
+                
+            elif key == keyboard.Key.down:
+                if self.is_active:
+                    self.candidate_window.select_next()
+                    return True
+                return False
             
             # 处理Tab键（确认第一个候选词）
             elif key == keyboard.Key.tab:
@@ -172,19 +255,6 @@ class InputManager(QObject):
                 else:
                     return False
             
-            # 处理上下方向键（选择候选词）
-            elif key == keyboard.Key.down:
-                if self.is_active:
-                    self.candidate_window.select_next()
-                    return True
-                return False
-            
-            elif key == keyboard.Key.up:
-                if self.is_active:
-                    self.candidate_window.select_previous()
-                    return True
-                return False
-            
             # 其他键（如标点符号等）
             else:
                 if self.is_active:
@@ -207,18 +277,44 @@ class InputManager(QObject):
         """更新候选词列表。"""
         if not self.pinyin_buffer:
             self.candidates = []
+            self.full_candidates = []
+            self.current_page = 0
             self.candidate_window.hide()
             return
         
         # 获取候选词
-        self.candidates = self.pinyin_engine.get_candidates(self.pinyin_buffer)
+        self.full_candidates = self.pinyin_engine.get_candidates(self.pinyin_buffer)
+        self.current_page = 0
+        self.show_current_page_candidates()
+        
+    def show_current_page_candidates(self):
+        """显示当前页的候选词。"""
+        if not self.full_candidates:
+            self.candidates = []
+            self.candidate_window.hide()
+            return
+        
+        start_index = self.current_page * self.page_size
+        end_index = min(start_index + self.page_size, len(self.full_candidates))
+        self.candidates = self.full_candidates[start_index:end_index]
+        
+        total_pages = (len(self.full_candidates) + self.page_size - 1) // self.page_size
         
         if self.candidates:
             # 显示候选词窗口
-            self.candidate_window.update_candidates(self.candidates)
+            self.candidate_window.update_candidates(
+                self.candidates,
+                current_page=self.current_page,
+                total_pages=total_pages
+            )
             self.move_candidate_window()
         else:
-            self.candidate_window.hide()
+            # 如果当前页没有候选词（可能发生在最后一页之后），尝试回到上一页
+            if self.current_page > 0:
+                self.current_page -= 1
+                self.show_current_page_candidates()
+            else:
+                self.candidate_window.hide()
     
     def select_candidate(self, index: int):
         """选择候选词。
@@ -227,8 +323,9 @@ class InputManager(QObject):
             index: 候选词索引
         """
         if 0 <= index < len(self.candidates):
-            selected_word = self.candidates[index]
-            print(f"Selecting candidate {index}: '{selected_word}'")
+            absolute_index = self.current_page * self.page_size + index
+            selected_word = self.full_candidates[absolute_index]
+            print(f"Selecting candidate {index} (absolute {absolute_index}): '{selected_word}'")
             
             # 清除拼音缓冲区中的字符
             self.clear_pinyin_buffer()
@@ -347,6 +444,8 @@ class InputManager(QObject):
         """重置输入状态。"""
         self.pinyin_buffer = ""
         self.candidates = []
+        self.full_candidates = []
+        self.current_page = 0
         self.is_active = False
         self.candidate_window.hide()
     
