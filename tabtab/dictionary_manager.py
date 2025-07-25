@@ -1,74 +1,116 @@
 # tabtab/dictionary_manager.py
+"""词库管理器，负责加载和查询rime词库文件。
+
+该模块实现了对8105.dict.yaml文件的解析和加载，
+提供高效的拼音到汉字转换查询功能。
+"""
+
 import yaml
+import os
+from typing import Dict, Optional
+
 
 class DictionaryManager:
-    """负责加载和管理输入法词库。
-
-    该类提供了从Rime格式的.dict.yaml文件中加载词典的功能，
-    并提供一个简单的接口来查询拼音对应的词汇。
+    """词库管理器，负责加载和查询词库数据。
+    
+    支持rime格式的yaml词库文件，提供拼音到汉字的快速查询功能。
     """
-    def __init__(self):
-        """DictionaryManager的构造函数。
-
-        初始化一个空的词典。
-        """
-        self.word_dict = {}
-
-    def load_rime_dict(self, file_path):
-        """加载Rime词库文件。
-
-        解析.dict.yaml文件，提取词语和对应的拼音，并存入word_dict。
-        这是一个简化的解析器，主要处理---之后的数据行。
-        Rime词典格式通常为：<汉字词>\\t<拼音序列>\\t<频率>
-
+    
+    def __init__(self, dict_path: str = None):
+        """初始化词库管理器。
+        
         Args:
-            file_path (str): 词库文件的路径。
+            dict_path: 词库文件路径，默认为assets/8105.dict.yaml
         """
+        self.word_dict: Dict[str, str] = {}
+        self.load_dictionary(dict_path)
+    
+    def load_dictionary(self, dict_path: str = None):
+        """加载词库文件。
+        
+        Args:
+            dict_path: 词库文件路径
+        """
+        if dict_path is None:
+            # 默认使用项目中的8105词库
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            dict_path = os.path.join(current_dir, '..', 'assets', '8105.dict.yaml')
+        
         try:
-            with open(file_path, 'r', encoding='utf-8') as f:
-                lines = f.readlines()
-                try:
-                    start_index = lines.index("---\n") + 1
-                except ValueError:
-                    start_index = 0
+            with open(dict_path, 'r', encoding='utf-8') as f:
+                content = f.read()
                 
-                for line in lines[start_index:]:
-                    parts = line.strip().split('\t')
-                    if len(parts) >= 2:
-                        word = parts[0]
-                        pinyin_seq = parts[1].split(' ')
-                        self.word_dict[''.join(pinyin_seq)] = word
-            print(f"Loaded {len(self.word_dict)} words from {file_path}")
+            # 分离YAML头部和词条数据
+            parts = content.split('...\n', 1)
+            if len(parts) < 2:
+                print("Warning: Invalid dictionary format")
+                return
+                
+            # 解析词条数据
+            word_lines = parts[1].strip().split('\n')
+            for line in word_lines:
+                line = line.strip()
+                if not line or line.startswith('#'):
+                    continue
+                    
+                parts = line.split('\t')
+                if len(parts) >= 2:
+                    hanzi = parts[0]
+                    pinyin = parts[1]
+                    # 将拼音作为key，汉字作为value
+                    self.word_dict[pinyin] = hanzi
+                    
+        except FileNotFoundError:
+            print(f"Dictionary file not found: {dict_path}")
         except Exception as e:
-            print(f"Error loading dictionary {file_path}: {e}")
-
-    def lookup(self, pinyin_str):
-        """查询拼音字符串对应的词语。
-
+            print(f"Error loading dictionary: {e}")
+    
+    def lookup(self, pinyin_str: str) -> Optional[str]:
+        """查询拼音对应的汉字。
+        
         Args:
-            pinyin_str (str): 要查询的无空格拼音字符串。
-
+            pinyin_str: 拼音字符串
+            
         Returns:
-            str or None: 如果找到，返回对应的词语；否则返回None。
+            对应的汉字，如果未找到则返回None
         """
         return self.word_dict.get(pinyin_str)
+    
+    def get_candidates(self, pinyin_str: str, max_count: int = 10) -> list:
+        """获取拼音的候选词列表。
+        
+        Args:
+            pinyin_str: 拼音字符串
+            max_count: 最大返回数量
+            
+        Returns:
+            候选词列表
+        """
+        candidates = []
+        
+        # 精确匹配
+        exact_match = self.lookup(pinyin_str)
+        if exact_match:
+            candidates.append(exact_match)
+        
+        # 前缀匹配
+        for pinyin, hanzi in self.word_dict.items():
+            if pinyin.startswith(pinyin_str) and hanzi not in candidates:
+                candidates.append(hanzi)
+                if len(candidates) >= max_count:
+                    break
+        
+        return candidates
+
 
 if __name__ == '__main__':
-    dummy_dict_content = """
-# Rime dictionary
-# ... metadata ...
----
-你好	ni hao
-世界	shi jie
-"""
-    dummy_file = "dummy.dict.yaml"
-    with open(dummy_file, "w", encoding="utf-8") as f:
-        f.write(dummy_dict_content)
-
-    dict_manager = DictionaryManager()
-    dict_manager.load_rime_dict(dummy_file)
-    print(f"Lookup 'nihao': {dict_manager.lookup('nihao')}")
-    print(f"Lookup 'shijie': {dict_manager.lookup('shijie')}")
+    # 测试词库管理器
+    dm = DictionaryManager()
+    print(f"Total words loaded: {len(dm.word_dict)}")
     
-    import os
-    os.remove(dummy_file)
+    # 测试查询
+    test_pinyins = ['ni', 'hao', 'nihao', 'zhongguo']
+    for pinyin in test_pinyins:
+        result = dm.lookup(pinyin)
+        candidates = dm.get_candidates(pinyin, 5)
+        print(f"'{pinyin}': {result}, candidates: {candidates}")

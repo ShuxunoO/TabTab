@@ -4,4 +4,5 @@ pypinyin
 pyyaml
 jieba
 pyautogui
+pywin32
 ollama
