@@ -1,0 +1,7 @@
+pynput
+PyQt6
+pypinyin
+pyyaml
+jieba
+pyautogui
+ollama
