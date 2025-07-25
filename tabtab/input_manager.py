@@ -16,6 +16,7 @@ from typing import List, Optional
 from pinyin_engine import PinyinEngine
 from candidate_window import CandidateWindow
 from keyboard_listener import KeyboardListenerThread, is_alpha_char, is_digit_char, get_key_char
+from ai_engine import AIEngine
 
 
 class InputManager(QObject):
@@ -28,6 +29,11 @@ class InputManager(QObject):
         # 核心组件
         self.pinyin_engine = PinyinEngine()
         self.candidate_window = CandidateWindow()
+        self.ai_engine = AIEngine()
+        
+        # 连接AI引擎信号
+        self.ai_engine.completions_ready.connect(self.on_ai_completions_ready)
+        self.ai_engine.error_occurred.connect(self.on_ai_error)
         
         # 输入状态
         self.pinyin_buffer = ""  # 拼音缓冲区
@@ -37,6 +43,16 @@ class InputManager(QObject):
         self.page_size = 5  # 每页显示数量
         self.is_active = False  # 输入法是否激活
         self.suppress_next_key = False  # 是否阻止下一个按键
+        
+        # AI补全状态
+        self.ai_completions: List[str] = []  # AI补全结果
+        self.is_ai_mode = False  # 是否处于AI补全模式
+        self.last_ai_request_time = 0  # 上次AI请求时间
+        self.ai_request_cooldown = 3  # AI请求冷却时间（秒）
+        
+        # 最近输入内容跟踪
+        self.last_input_text = ""  # 最近一次输入的文本
+        self.last_input_pinyin = ""  # 最近一次输入的拼音
         
         # 双击Tab检测相关
         self.last_tab_time = 0  # 上次Tab按键时间戳
@@ -76,6 +92,22 @@ class InputManager(QObject):
         Returns:
             True如果应该阻止，False如果允许传播
         """
+        # 如果在AI模式下，阻止相关按键
+        if self.is_ai_mode and self.ai_completions:
+            # 阻止数字键1-9
+            if is_digit_char(key):
+                digit = int(get_key_char(key))
+                if 1 <= digit <= len(self.ai_completions):
+                    return True
+            
+            # 阻止Tab键、空格键、回车键
+            if key in [keyboard.Key.tab, keyboard.Key.space, keyboard.Key.enter]:
+                return True
+
+            # 阻止方向键
+            if key in [keyboard.Key.left, keyboard.Key.right, keyboard.Key.up, keyboard.Key.down]:
+                return True
+        
         # 如果输入法激活且有候选词，阻止某些按键
         if self.is_active and self.candidates:
             # 阻止数字键1-9
@@ -144,15 +176,81 @@ class InputManager(QObject):
         双击Tab键可以在候选词窗口中快速切换到AI补全建议。
         """
         print("Tab键双击事件触发")
-        # 这里可以添加双击Tab键的特殊功能
-        # 例如：切换到AI补全模式，或者触发特定功能
+        # 检查是否满足AI请求条件
+        text_for_ai = ""
         
-        # 示例：如果将来实现了AI补全功能，可以在这里触发
-        # self.switch_to_ai_mode()
+        # 优先使用当前激活的输入
+        if self.is_active and self.pinyin_buffer:
+            first_candidate = self.candidates[0] if self.candidates else ""
+            text_for_ai = f"{self.pinyin_buffer} {first_candidate}"
+        # 如果没有当前输入，尝试使用最近输入的内容
+        elif self.last_input_text:
+            # 如果有最近输入的拼音，使用拼音+文本
+            if self.last_input_pinyin:
+                text_for_ai = f"{self.last_input_pinyin} {self.last_input_text}"
+            else:
+                # 否则只使用最近输入的文本
+                text_for_ai = self.last_input_text
+        else:
+            print("没有激活的输入或最近输入内容，无法请求AI补全")
+            return
+            
+        # 检查冷却时间
+        current_time = time.time()
+        if (current_time - self.last_ai_request_time) < self.ai_request_cooldown:
+            print(f"AI请求冷却中，还需等待{self.ai_request_cooldown - (current_time - self.last_ai_request_time):.1f}秒")
+            return
+            
+        # 记录请求时间
+        self.last_ai_request_time = current_time
         
-        # 当前实现：显示一个提示（可以替换为实际功能）
-        if self.is_active and self.candidates:
-            print("双击Tab键功能已触发")
+        # 清理发送给AI的文本，移除可能导致问题的特殊字符
+        text_for_ai = self.clean_text_for_ai(text_for_ai)
+        print(f"请求AI补全: '{text_for_ai}'")
+        
+        # 请求AI补全
+        self.ai_engine.get_completions(text_for_ai)
+    
+    def clean_text_for_ai(self, text: str) -> str:
+        """清理发送给AI的文本，移除可能导致问题的特殊字符。
+        
+        Args:
+            text: 原始文本
+            
+        Returns:
+            清理后的文本
+        """
+        # 移除可能导致编码问题的特殊字符
+        cleaned_text = ''.join(char for char in text if ord(char) < 65535)
+        # 移除一些可能导致解析问题的特殊符号
+        invalid_chars = ['\uff1f']  # 包括全角问号等
+        for char in invalid_chars:
+            cleaned_text = cleaned_text.replace(char, '')
+        return cleaned_text
+    
+    def on_ai_completions_ready(self, completions: List[str]):
+        """处理AI补全结果。
+        
+        Args:
+            completions: AI返回的补全结果列表
+        """
+        print(f"AI补全结果: {completions}")
+        self.ai_completions = completions
+        self.is_ai_mode = True
+        
+        # 更新候选窗口显示AI补全结果
+        if self.ai_completions:
+            self.candidate_window.update_candidates(self.ai_completions)
+            self.move_candidate_window()
+    
+    def on_ai_error(self, error_msg: str):
+        """处理AI错误。
+        
+        Args:
+            error_msg: 错误信息
+        """
+        print(f"AI请求错误: {error_msg}")
+        # 可以考虑显示错误信息给用户
     
     def on_key_press(self, key):
         """处理键盘按下事件。
@@ -169,10 +267,14 @@ class InputManager(QObject):
             
             # 处理数字键（选择候选词）
             if is_digit_char(key):
-                if self.is_active and self.candidates:
+                if (self.is_active and self.candidates) or (self.is_ai_mode and self.ai_completions):
                     digit = int(get_key_char(key))
                     print(f"Digit key pressed: {digit}")
-                    if 1 <= digit <= len(self.candidates):
+                    if self.is_ai_mode and self.ai_completions and 1 <= digit <= len(self.ai_completions):
+                        print(f"Selecting AI completion {digit-1}: {self.ai_completions[digit-1]}")
+                        self.select_candidate(digit - 1)
+                        return True  # 阻止数字键传播
+                    elif self.is_active and self.candidates and 1 <= digit <= len(self.candidates):
                         print(f"Selecting candidate {digit-1}: {self.candidates[digit-1]}")
                         self.select_candidate(digit - 1)
                         return True  # 阻止数字键传播
@@ -181,6 +283,10 @@ class InputManager(QObject):
 
             # 处理字母键（拼音输入）
             if is_alpha_char(key):
+                # 如果在AI模式下，先退出AI模式
+                if self.is_ai_mode:
+                    self.exit_ai_mode()
+                    
                 char = get_key_char(key).lower()
                 self.pinyin_buffer += char
                 self.update_candidates()
@@ -190,7 +296,10 @@ class InputManager(QObject):
             
             # 处理方向键（选择候选词和翻页）
             elif key == keyboard.Key.left:
-                if self.is_active:
+                if self.is_ai_mode:
+                    self.candidate_window.select_previous()
+                    return True
+                elif self.is_active:
                     if self.candidate_window.is_at_beginning():
                         # 在候选词列表开头，尝试翻到上一页
                         if self.previous_page():
@@ -203,7 +312,10 @@ class InputManager(QObject):
                 return False
                 
             elif key == keyboard.Key.right:
-                if self.is_active:
+                if self.is_ai_mode:
+                    self.candidate_window.select_next()
+                    return True
+                elif self.is_active:
                     if self.candidate_window.is_at_end():
                         # 在候选词列表末尾，尝试翻到下一页
                         if self.next_page():
@@ -216,13 +328,13 @@ class InputManager(QObject):
                 return False
                 
             elif key == keyboard.Key.up:
-                if self.is_active:
+                if self.is_ai_mode or self.is_active:
                     self.candidate_window.select_previous()
                     return True
                 return False
                 
             elif key == keyboard.Key.down:
-                if self.is_active:
+                if self.is_ai_mode or self.is_active:
                     self.candidate_window.select_next()
                     return True
                 return False
@@ -237,13 +349,18 @@ class InputManager(QObject):
                     # 双击Tab事件
                     self.handle_tab_double_click()
                     self.last_tab_time = 0  # 重置时间，避免连续触发
+                    # 双击Tab时不自动输入候选词，直接返回
                     return True
-                else:
-                    # 单击Tab事件，记录时间
-                    self.last_tab_time = current_time
+                
+                # 单击Tab事件，记录时间
+                self.last_tab_time = current_time
                 
                 # 处理单击Tab（确认第一个候选词）
-                if self.is_active and self.candidates:
+                if self.is_ai_mode and self.ai_completions:
+                    print(f"Tab selecting first AI completion: {self.ai_completions[0]}")
+                    self.select_candidate(0)
+                    return True  # 阻止Tab键传播
+                elif self.is_active and self.candidates:
                     print(f"Tab selecting first candidate: {self.candidates[0]}")
                     self.select_candidate(0)
                     return True  # 阻止Tab键传播
@@ -252,7 +369,10 @@ class InputManager(QObject):
             
             # 处理空格键（确认第一个候选词或输入空格）
             elif key == keyboard.Key.space:
-                if self.is_active and self.candidates:
+                if self.is_ai_mode and self.ai_completions:
+                    self.select_candidate(0)
+                    return True  # 阻止空格键传播
+                elif self.is_active and self.candidates:
                     self.select_candidate(0)
                     return True  # 阻止空格键传播
                 else:
@@ -261,7 +381,10 @@ class InputManager(QObject):
             
             # 处理回车键（确认第一个候选词或换行）
             elif key == keyboard.Key.enter:
-                if self.is_active and self.candidates:
+                if self.is_ai_mode and self.ai_completions:
+                    self.select_candidate(0)
+                    return True  # 阻止回车键传播
+                elif self.is_active and self.candidates:
                     self.select_candidate(0)
                     return True  # 阻止回车键传播
                 else:
@@ -270,7 +393,11 @@ class InputManager(QObject):
             
             # 处理退格键
             elif key == keyboard.Key.backspace:
-                if self.is_active and self.pinyin_buffer:
+                # 如果在AI模式下，退出AI模式
+                if self.is_ai_mode:
+                    self.exit_ai_mode()
+                    return True  # 阻止退格键传播
+                elif self.is_active and self.pinyin_buffer:
                     self.pinyin_buffer = self.pinyin_buffer[:-1]
                     self.update_candidates()
                     if not self.pinyin_buffer:
@@ -282,7 +409,11 @@ class InputManager(QObject):
             
             # 处理ESC键（取消输入）
             elif key == keyboard.Key.esc:
-                if self.is_active:
+                # 如果在AI模式下，退出AI模式
+                if self.is_ai_mode:
+                    self.exit_ai_mode()
+                    return True  # 阻止ESC键传播
+                elif self.is_active:
                     self.deactivate()
                     return True  # 阻止ESC键传播
                 else:
@@ -290,7 +421,10 @@ class InputManager(QObject):
             
             # 其他键（如标点符号等）
             else:
-                if self.is_active:
+                # 如果在AI模式下，退出AI模式
+                if self.is_ai_mode:
+                    self.exit_ai_mode()
+                elif self.is_active:
                     # 如果正在输入拼音，先确认第一个候选词，然后输入字符
                     if self.candidates:
                         self.select_candidate(0)
@@ -355,20 +489,45 @@ class InputManager(QObject):
         Args:
             index: 候选词索引
         """
-        if 0 <= index < len(self.candidates):
-            absolute_index = self.current_page * self.page_size + index
-            selected_word = self.full_candidates[absolute_index]
-            print(f"Selecting candidate {index} (absolute {absolute_index}): '{selected_word}'")
-            
-            # 清除拼音缓冲区中的字符
-            self.clear_pinyin_buffer()
-            
-            # 使用延迟确保清除操作完成
-            QTimer.singleShot(50, lambda: self.input_text_delayed(selected_word))
-            
-            # 清空状态
-            self.reset_state()
-            print(f"Successfully selected candidate: '{selected_word}'")
+        if self.is_ai_mode:
+            # AI模式下选择AI补全结果
+            if 0 <= index < len(self.ai_completions):
+                selected_completion = self.ai_completions[index]
+                print(f"选择AI补全结果 {index}: '{selected_completion}'")
+                
+                # 清除拼音缓冲区中的字符
+                self.clear_pinyin_buffer()
+                
+                # 使用延迟确保清除操作完成
+                QTimer.singleShot(50, lambda: self.input_text_delayed(selected_completion))
+                
+                # 记录最近输入的内容
+                self.last_input_text = selected_completion
+                self.last_input_pinyin = ""
+                
+                # 退出AI模式并重置状态
+                self.exit_ai_mode()
+                print(f"成功选择AI补全结果: '{selected_completion}'")
+        else:
+            # 普通模式下选择候选词
+            if 0 <= index < len(self.candidates):
+                absolute_index = self.current_page * self.page_size + index
+                selected_word = self.full_candidates[absolute_index]
+                print(f"Selecting candidate {index} (absolute {absolute_index}): '{selected_word}'")
+                
+                # 清除拼音缓冲区中的字符
+                self.clear_pinyin_buffer()
+                
+                # 使用延迟确保清除操作完成
+                QTimer.singleShot(50, lambda: self.input_text_delayed(selected_word))
+                
+                # 记录最近输入的内容
+                self.last_input_text = selected_word
+                self.last_input_pinyin = self.pinyin_buffer
+                
+                # 清空状态
+                self.reset_state()
+                print(f"Successfully selected candidate: '{selected_word}'")
     
     def input_text_delayed(self, text: str):
         """延迟输入文本。
@@ -473,6 +632,13 @@ class InputManager(QObject):
                 pyautogui.press('backspace')
             print("Pinyin buffer cleared")
     
+    def exit_ai_mode(self):
+        """退出AI模式，恢复普通候选词显示。"""
+        self.is_ai_mode = False
+        self.ai_completions = []
+        # 重新显示普通候选词
+        self.show_current_page_candidates()
+    
     def reset_state(self):
         """重置输入状态。"""
         self.pinyin_buffer = ""
@@ -480,7 +646,10 @@ class InputManager(QObject):
         self.full_candidates = []
         self.current_page = 0
         self.is_active = False
+        self.is_ai_mode = False
+        self.ai_completions = []
         self.candidate_window.hide()
+        # 注意：不清除last_input_text和last_input_pinyin，以便双击Tab时使用
     
     def deactivate(self):
         """取消激活输入法。"""
