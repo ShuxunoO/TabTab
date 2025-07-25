@@ -7,7 +7,7 @@
 
 import yaml
 import os
-from typing import Dict, Optional
+from typing import Dict, Optional, List
 
 
 class DictionaryManager:
@@ -22,7 +22,7 @@ class DictionaryManager:
         Args:
             dict_path: 词库文件路径，默认为assets/8105.dict.yaml
         """
-        self.word_dict: Dict[str, str] = {}
+        self.word_dict: Dict[str, List[str]] = {}
         self.load_dictionary(dict_path)
     
     def load_dictionary(self, dict_path: str = None):
@@ -56,23 +56,28 @@ class DictionaryManager:
                 parts = line.split('\t')
                 if len(parts) >= 2:
                     hanzi = parts[0]
-                    pinyin = parts[1]
-                    # 将拼音作为key，汉字作为value
-                    self.word_dict[pinyin] = hanzi
+                    pinyin_with_spaces = parts[1]
+                    pinyin = pinyin_with_spaces.replace(" ", "")
+                    
+                    if pinyin not in self.word_dict:
+                        self.word_dict[pinyin] = []
+                    
+                    if hanzi not in self.word_dict[pinyin]:
+                        self.word_dict[pinyin].append(hanzi)
                     
         except FileNotFoundError:
             print(f"Dictionary file not found: {dict_path}")
         except Exception as e:
             print(f"Error loading dictionary: {e}")
     
-    def lookup(self, pinyin_str: str) -> Optional[str]:
-        """查询拼音对应的汉字。
+    def lookup(self, pinyin_str: str) -> Optional[List[str]]:
+        """查询拼音对应的汉字列表。
         
         Args:
             pinyin_str: 拼音字符串
             
         Returns:
-            对应的汉字，如果未找到则返回None
+            对应的汉字列表，如果未找到则返回None
         """
         return self.word_dict.get(pinyin_str)
     
@@ -89,16 +94,18 @@ class DictionaryManager:
         candidates = []
         
         # 精确匹配
-        exact_match = self.lookup(pinyin_str)
-        if exact_match:
-            candidates.append(exact_match)
+        exact_matches = self.lookup(pinyin_str)
+        if exact_matches:
+            candidates.extend(exact_matches)
         
         # 前缀匹配
-        for pinyin, hanzi in self.word_dict.items():
-            if pinyin.startswith(pinyin_str) and hanzi not in candidates:
-                candidates.append(hanzi)
-                if len(candidates) >= max_count:
-                    break
+        for pinyin, hanzi_list in self.word_dict.items():
+            if pinyin.startswith(pinyin_str):
+                for hanzi in hanzi_list:
+                    if hanzi not in candidates:
+                        candidates.append(hanzi)
+                        if len(candidates) >= max_count:
+                            return candidates
         
         return candidates
 

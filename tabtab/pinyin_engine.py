@@ -17,13 +17,40 @@ class PinyinEngine:
         """初始化拼音引擎。"""
         self.dict_manager = DictionaryManager()
     
+    def segment(self, pinyin_str: str) -> List[str]:
+        """使用动态规划对拼音字符串进行分词。
+        
+        Args:
+            pinyin_str: 用户输入的拼音字符串
+            
+        Returns:
+            一个或多个分词后的候选词语组合
+        """
+        n = len(pinyin_str)
+        dp = [[] for _ in range(n + 1)]
+        dp[0] = [""]
+
+        for i in range(1, n + 1):
+            for j in range(i):
+                sub_pinyin = pinyin_str[j:i]
+                words = self.dict_manager.lookup(sub_pinyin)
+                if words and dp[j]:
+                    for word in words:
+                        for prev_word in dp[j]:
+                            # 限制候选词数量，避免组合爆炸
+                            if len(dp[i]) < 10:
+                                dp[i].append(f"{prev_word}{word}")
+        
+        return dp[n]
+
     def get_candidates(self, pinyin_str: str) -> List[str]:
         """根据拼音字符串获取候选词列表。
         
         查询顺序:
-        1. 首先在自定义词典中查找完全匹配的词语
-        2. 然后使用pypinyin库获取单字候选
-        3. 添加一些硬编码的常用词作为补充
+        1. 首先使用分词算法获取整词候选
+        2. 然后在自定义词典中查找完全匹配的词语
+        3. 使用pypinyin库获取单字候选
+        4. 添加一些硬编码的常用词作为补充
         
         Args:
             pinyin_str: 用户输入的拼音字符串
@@ -35,12 +62,16 @@ class PinyinEngine:
             return []
         
         candidates = []
+
+        # 1. 使用分词算法获取候选
+        segmented_candidates = self.segment(pinyin_str)
+        candidates.extend(segmented_candidates)
         
-        # 1. 首先检查自定义词典
-        dict_candidates = self.dict_manager.get_candidates(pinyin_str, 3)
+        # 2. 检查自定义词典
+        dict_candidates = self.dict_manager.get_candidates(pinyin_str, 5)
         candidates.extend(dict_candidates)
         
-        # 2. 使用pypinyin获取单字候选
+        # 3. 使用pypinyin获取单字候选
         try:
             # 获取每个字符的拼音
             result = pinyin(pinyin_str, style=Style.NORMAL, heteronym=True)
@@ -53,7 +84,7 @@ class PinyinEngine:
         except Exception as e:
             print(f"Pypinyin error: {e}")
         
-        # 3. 添加硬编码的常用候选词
+        # 4. 添加硬编码的常用候选词
         common_mappings = {
             'ni': ['你', '尼', '泥'],
             'hao': ['好', '号', '毫'],
@@ -97,7 +128,7 @@ if __name__ == '__main__':
     # 测试拼音引擎
     engine = PinyinEngine()
     
-    test_cases = ['ni', 'hao', 'nihao', 'wo', 'de', 'shi']
+    test_cases = ['ni', 'hao', 'nihao', 'wo', 'de', 'shi', 'zhongguo', 'nihaoma']
     for test in test_cases:
         candidates = engine.get_candidates(test)
         print(f"'{test}': {candidates}")
