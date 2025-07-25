@@ -38,6 +38,10 @@ class InputManager(QObject):
         self.is_active = False  # 输入法是否激活
         self.suppress_next_key = False  # 是否阻止下一个按键
         
+        # 双击Tab检测相关
+        self.last_tab_time = 0  # 上次Tab按键时间戳
+        self.tab_double_click_interval = 0.3  # 双击时间间隔阈值（秒）
+        
         # 键盘监听
         self.keyboard_listener = KeyboardListenerThread()
         self.keyboard_listener.key_pressed.connect(self.on_key_press)
@@ -134,6 +138,22 @@ class InputManager(QObject):
         else:
             self.previous_page()
     
+    def handle_tab_double_click(self):
+        """处理双击Tab事件。
+        
+        双击Tab键可以在候选词窗口中快速切换到AI补全建议。
+        """
+        print("Tab键双击事件触发")
+        # 这里可以添加双击Tab键的特殊功能
+        # 例如：切换到AI补全模式，或者触发特定功能
+        
+        # 示例：如果将来实现了AI补全功能，可以在这里触发
+        # self.switch_to_ai_mode()
+        
+        # 当前实现：显示一个提示（可以替换为实际功能）
+        if self.is_active and self.candidates:
+            print("双击Tab键功能已触发")
+    
     def on_key_press(self, key):
         """处理键盘按下事件。
         
@@ -210,6 +230,19 @@ class InputManager(QObject):
             # 处理Tab键（确认第一个候选词）
             elif key == keyboard.Key.tab:
                 print(f"Tab key pressed - Active: {self.is_active}, Candidates: {len(self.candidates)}")
+                
+                # 检测双击Tab事件
+                current_time = time.time()
+                if (current_time - self.last_tab_time) < self.tab_double_click_interval:
+                    # 双击Tab事件
+                    self.handle_tab_double_click()
+                    self.last_tab_time = 0  # 重置时间，避免连续触发
+                    return True
+                else:
+                    # 单击Tab事件，记录时间
+                    self.last_tab_time = current_time
+                
+                # 处理单击Tab（确认第一个候选词）
                 if self.is_active and self.candidates:
                     print(f"Tab selecting first candidate: {self.candidates[0]}")
                     self.select_candidate(0)
