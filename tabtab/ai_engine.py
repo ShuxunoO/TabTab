@@ -29,16 +29,26 @@ class AICompletionWorker(QRunnable):
         try:
             client = Client()
             datetime_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-            prompt = ("""我的原本输入是：‘{user_input}’，请你继续以我的口吻继续补全这段和别人的对话，要求尽可能贴近真实用户的输入。
-                        要求和原本输入内容强相关，语气通顺自然，符合对话情景。不要提供任何解释或多余的文字，只返回补全的内容。
-                        要求返1个string list，list中包含三个字符串，格式为：['response1', 'response2', 'response3'].
-                        注意：
-                        1. 只要3条内容，不能多也不能少；
-                        2. 3条内容要各不相同，尽可能差异化；
-                        3. 每条回复必须50字以内；
-                        4. 用户很有可能会输入错别字和模糊拼音，根据你常识纠正补全的内容。
-                        5. 当前的时间是：{datetime}。""".format(user_input=self.text, datetime=datetime_str)
-                    )
+            # prompt = ("""我的原本输入是：‘{user_input}’，请你继续以我的口吻继续补全这段和别人的对话，要求尽可能贴近真实用户的输入。
+            #             要求和原本输入内容强相关，语气通顺自然，符合对话情景。不要提供任何解释或多余的文字，只返回补全的内容。
+            #             要求返1个string list，list中包含三个字符串，格式为：['response1', 'response2', 'response3'].
+            #             注意：
+            #             1. 只要3条内容，不能多也不能少；
+            #             2. 3条内容要各不相同，尽可能差异化；
+            #             3. 每条回复必须50字以内；
+            #             4. 用户很有可能会输入错别字和模糊拼音，根据你常识纠正补全的内容。
+            #             5. 当前的时间是：{datetime}。""".format(user_input=self.text, datetime=datetime_str)
+            #         )
+            prompt = ("""我的原本输入是：'{user_input}'，请帮我润色这段要发给女朋友的微信内容。
+                    要求：
+                    1. 保持我的原意，但表达更贴心温暖
+                    2. 语气要温柔体贴，充满关爱
+                    3. 避免直男式表达，考虑女孩子的感受
+                    4. 防止因表达不当引起误会或生气,
+                    5. 可以幽默诙谐一些，但是别太尴尬，
+                    6. 每条回复50字以内，返回3个不同版本
+                    格式：['response1', 'response2', 'response3']
+                    当前时间：{datetime}""".format(user_input=self.text, datetime=datetime_str))
             print("AI请求内容:", prompt)
             response = client.chat(model='qwen2.5:1.5b', messages=[
                 {'role': 'user', 'content': prompt}
