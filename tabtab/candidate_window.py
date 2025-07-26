@@ -398,17 +398,17 @@ class CandidateWindow(QWidget):
         key = event.key()
         
         if key == Qt.Key.Key_Right:
-            if self.select_next():
-                if self.current_page < self.total_pages - 1:
-                    self.page_change_requested.emit(1)  # 请求下一页
+            if not self.ai_suggestion_frame.isVisible():
+                self.select_next()  # 只有在非AI模式下才允许左右键切换
         elif key == Qt.Key.Key_Left:
-            if self.select_previous():
-                if self.current_page > 0:
-                    self.page_change_requested.emit(-1)  # 请求上一页
-        elif key == Qt.Key.Key_Down and self.ai_suggestion_frame.isVisible():
-            self.select_next_ai()
-        elif key == Qt.Key.Key_Up and self.ai_suggestion_frame.isVisible():
-            self.select_previous_ai()
+            if not self.ai_suggestion_frame.isVisible():
+                self.select_previous()  # 只有在非AI模式下才允许左右键切换
+        elif key == Qt.Key.Key_Down:
+            if self.ai_suggestion_frame.isVisible():
+                self.select_next_ai()  # 只有在AI模式下才允许上下键切换
+        elif key == Qt.Key.Key_Up:
+            if self.ai_suggestion_frame.isVisible():
+                self.select_previous_ai()  # 只有在AI模式下才允许上下键切换
         elif key == Qt.Key.Key_Return or key == Qt.Key.Key_Enter:
             if self.candidates:
                 self.candidate_selected.emit(self.selected_index)

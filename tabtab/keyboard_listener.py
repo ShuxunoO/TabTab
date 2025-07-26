@@ -74,8 +74,10 @@ class KeyboardListener(QObject):
             if self.should_suppress:
                 self.should_suppress = False  # 重置标志
                 return False  # 阻止事件传播
+            return None  # 允许事件传播
         except Exception as e:
             print(f"Error in key press handler: {e}")
+            return None
     
     def set_suppress_next_key(self, suppress: bool):
         """设置是否阻止下一个键盘事件的传播。
@@ -115,7 +117,6 @@ class KeyboardListenerThread(QThread):
         
         # 将监听器移动到当前线程
         self.listener.moveToThread(self)
-    
     def run(self):
         """线程运行方法。"""
         self.listener.start_listening()

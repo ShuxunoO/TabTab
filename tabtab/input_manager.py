@@ -239,7 +239,7 @@ class InputManager(QObject):
     
     def on_key_press(self, key):
         """处理键盘按下事件。
-        
+
         Args:
             key: 按下的键
         """
@@ -281,46 +281,32 @@ class InputManager(QObject):
             
             # 处理方向键（选择候选词和翻页）
             elif key == keyboard.Key.left:
-                if self.is_ai_mode:
+                if self.is_active and self.candidates and not self.is_ai_mode:
                     self.candidate_window.select_previous()
                     return True
-                elif self.is_active:
-                    if self.candidate_window.is_at_beginning():
-                        # 在候选词列表开头，尝试翻到上一页
-                        if self.previous_page():
-                            # 如果成功翻页，选择新页的最后一项
-                            self.candidate_window.select_last()
-                    else:
-                        # 不在开头，选择上一个候选词
-                        self.candidate_window.select_previous()
+                elif self.is_active and self.candidates and self.is_ai_mode:
+                    self.candidate_window.select_previous()
                     return True
                 return False
                 
             elif key == keyboard.Key.right:
-                if self.is_ai_mode:
+                if self.is_active and self.candidates and not self.is_ai_mode:
                     self.candidate_window.select_next()
                     return True
-                elif self.is_active:
-                    if self.candidate_window.is_at_end():
-                        # 在候选词列表末尾，尝试翻到下一页
-                        if self.next_page():
-                            # 如果成功翻页，选择新页的第一项
-                            self.candidate_window.select_first()
-                    else:
-                        # 不在末尾，选择下一个候选词
-                        self.candidate_window.select_next()
+                elif self.is_active and self.candidates and self.is_ai_mode:
+                    self.candidate_window.select_next()
                     return True
                 return False
                 
             elif key == keyboard.Key.up:
-                if self.is_ai_mode or self.is_active:
-                    self.candidate_window.select_previous()
+                if self.is_ai_mode and self.ai_completions:
+                    self.candidate_window.select_previous_ai()
                     return True
                 return False
                 
             elif key == keyboard.Key.down:
-                if self.is_ai_mode or self.is_active:
-                    self.candidate_window.select_next()
+                if self.is_ai_mode and self.ai_completions:
+                    self.candidate_window.select_next_ai()
                     return True
                 return False
             
@@ -491,7 +477,7 @@ class InputManager(QObject):
                 self.last_input_pinyin = ""
                 
                 # 退出AI模式并重置状态
-                self.exit_ai_mode()
+                self.exit_ai_mode()  # 确保这里正确退出AI模式
                 print(f"成功选择AI补全结果: '{selected_completion}'")
         else:
             # 普通模式下选择候选词
@@ -511,9 +497,9 @@ class InputManager(QObject):
                 self.last_input_pinyin = self.pinyin_buffer
                 
                 # 清空状态
-                self.reset_state()
+                self.reset_state()  # 确保这里正确重置状态
                 print(f"Successfully selected candidate: '{selected_word}'")
-    
+
     def input_text_delayed(self, text: str):
         """延迟输入文本。
         
@@ -623,6 +609,7 @@ class InputManager(QObject):
         self.ai_completions = []
         # 重新显示普通候选词
         self.show_current_page_candidates()
+        self.candidate_window.ai_suggestion_frame.hide()  # 确保隐藏AI建议框
     
     def reset_state(self):
         """重置输入状态。"""
