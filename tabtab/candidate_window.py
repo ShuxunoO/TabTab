@@ -362,19 +362,19 @@ class CandidateWindow(QWidget):
         
         # 处理右边缘情况
         if x + window_width > screen.width():
-            x = screen.width() - window_width - 5  # 距离右边缘5px
-            
+            x = screen.width() - window_width
+        
         # 处理左边缘情况
         if x < 0:
-            x = 5  # 距离左边缘5px
+            x = 0
             
         # 处理下边缘情况
         if y + window_height > screen.height():
-            y = screen.height() - window_height - 5  # 距离下边缘5px
-            
+            y = screen.height() - window_height - 30
+        
         # 处理上边缘情况
         if y < 0:
-            y = 5  # 距离上边缘5px
+            y = 0
             
         self.move(x, y)
     
