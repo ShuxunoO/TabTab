@@ -200,7 +200,18 @@ class CandidateWindow(QWidget):
         self.update_ai_selection()
         self.adjustSize()
         self.show()
-    
+
+    def on_ai_suggestion_clicked(self, index: int):
+        """处理AI建议点击事件。
+
+        Args:
+            index (int): 被点击的AI建议索引。
+        """
+        if 0 <= index < len(self.ai_suggestions):
+            self.ai_selected_index = index
+            self.update_ai_selection()
+            self.candidate_selected.emit(index)
+
     def update_selection(self):
         """更新候选词选中状态的显示。
 
@@ -334,17 +345,6 @@ class CandidateWindow(QWidget):
         if 0 <= index < len(self.candidates):
             self.selected_index = index
             self.update_selection()
-            self.candidate_selected.emit(index)
-    
-    def on_ai_suggestion_clicked(self, index: int):
-        """处理AI建议点击事件。
-
-        Args:
-            index (int): 被点击的AI建议索引。
-        """
-        if 0 <= index < len(self.ai_suggestions):
-            self.ai_selected_index = index
-            self.update_ai_selection()
             self.candidate_selected.emit(index)
     
     def move_window(self, x: int, y: int):

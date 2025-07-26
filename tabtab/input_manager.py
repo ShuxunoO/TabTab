@@ -13,10 +13,12 @@ from PyQt6.QtCore import QObject, pyqtSignal, QTimer
 from PyQt6.QtWidgets import QApplication
 from typing import List, Optional
 
+
 from pinyin_engine import PinyinEngine
 from candidate_window import CandidateWindow
 from keyboard_listener import KeyboardListenerThread, is_alpha_char, is_digit_char, get_key_char
 from ai_engine import AIEngine
+import re
 
 
 class InputManager(QObject):
@@ -172,7 +174,7 @@ class InputManager(QObject):
     
     def handle_tab_double_click(self):
         """处理双击Tab事件。
-        
+
         双击Tab键可以在候选词窗口中快速切换到AI补全建议。
         """
         print("Tab键双击事件触发")
@@ -210,27 +212,10 @@ class InputManager(QObject):
         
         # 请求AI补全
         self.ai_engine.get_completions(text_for_ai)
-    
-    def clean_text_for_ai(self, text: str) -> str:
-        """清理发送给AI的文本，移除可能导致问题的特殊字符。
-        
-        Args:
-            text: 原始文本
-            
-        Returns:
-            清理后的文本
-        """
-        # 移除可能导致编码问题的特殊字符
-        cleaned_text = ''.join(char for char in text if ord(char) < 65535)
-        # 移除一些可能导致解析问题的特殊符号
-        invalid_chars = ['\uff1f']  # 包括全角问号等
-        for char in invalid_chars:
-            cleaned_text = cleaned_text.replace(char, '')
-        return cleaned_text
-    
+
     def on_ai_completions_ready(self, completions: List[str]):
         """处理AI补全结果。
-        
+
         Args:
             completions: AI返回的补全结果列表
         """
@@ -240,9 +225,9 @@ class InputManager(QObject):
         
         # 更新候选窗口显示AI补全结果
         if self.ai_completions:
-            self.candidate_window.update_candidates(self.ai_completions)
+            self.candidate_window.show_ai_suggestions(self.ai_completions)
             self.move_candidate_window()
-    
+
     def on_ai_error(self, error_msg: str):
         """处理AI错误。
         
@@ -684,7 +669,19 @@ class InputManager(QObject):
             # 如果失败，使用屏幕中心
             screen = QApplication.primaryScreen().geometry()
             return screen.width() // 2, screen.height() // 2
+    
+    def clean_text_for_ai(self, text: str) -> str:
+        """清理发送给AI的文本，移除可能导致问题的特殊字符。
 
+        Args:
+            text (str): 需要清理的文本
+
+        Returns:
+            str: 清理后的文本
+        """
+        # 移除特殊字符，只保留字母、数字和常见标点符号
+        cleaned_text = re.sub(r'[^\w\s.,!?]', '', text)
+        return cleaned_text.strip()
 
 if __name__ == '__main__':
     # 测试输入管理器
