@@ -409,6 +409,84 @@ class PinyinEngine:
         
         return []
 
+    def segment_crf(self, pinyin_str: str) -> List[str]:
+        """使用基于CRF思想的动态规划算法对拼音字符串进行分词。
+        
+        此方法考虑更复杂的上下文特征和词频信息，提高长拼音的分词准确性。
+        
+        Args:
+            pinyin_str: 用户输入的拼音字符串
+            
+        Returns:
+            一个或多个分词后的候选词语组合，按得分排序
+        """
+        if not pinyin_str:
+            return []
+            
+        n = len(pinyin_str)
+        # dp[i] 存储前i个字符的所有可能分词结果
+        # 每个元素包含(词语组合, 得分)的元组列表
+        dp: List[List[Tuple[str, float]]] = [[] for _ in range(n + 1)]
+        dp[0] = [("", 0.0)]
+
+        # 记录每个位置的最佳路径，用于回溯
+        best_paths = [[] for _ in range(n + 1)]
+        
+        for i in range(1, n + 1):
+            for j in range(max(0, i - 15), i):  # 限制回溯窗口大小，提高效率
+                # 如果前j个字符无法分词，则跳过
+                if not dp[j]:
+                    continue
+                    
+                sub_pinyin = pinyin_str[j:i]
+                words = self.dict_manager.lookup(sub_pinyin)
+                if words:
+                    for word in words:
+                        for prev_segment, prev_score in dp[j]:
+                            # 计算当前词语的得分，综合考虑多种因素
+                            word_score = self._calculate_crf_score(word, sub_pinyin, prev_segment)
+                            total_score = prev_score + word_score
+                            
+                            # 限制候选词数量，避免组合爆炸
+                            new_segment = f"{prev_segment}{word}" if prev_segment else word
+                            candidate = (new_segment, total_score)
+                            
+                            if len(dp[i]) < 20:  # 限制候选数量
+                                dp[i].append(candidate)
+                            else:
+                                # 保持得分最高的候选词
+                                dp[i].append(candidate)
+                                dp[i].sort(key=lambda x: x[1], reverse=True)
+                                dp[i] = dp[i][:20]
+                # 添加单字处理，防止遗漏
+                elif i - j == 1:  # 单个字符
+                    single_char_pinyin = pinyin_str[j:i]
+                    single_chars = self.dict_manager.lookup(single_char_pinyin)
+                    if single_chars:
+                        for char in single_chars:
+                            for prev_segment, prev_score in dp[j]:
+                                # 单字给予较低的得分
+                                char_score = self._calculate_crf_score(char, single_char_pinyin, prev_segment) * 0.1
+                                total_score = prev_score + char_score
+                                
+                                new_segment = f"{prev_segment}{char}" if prev_segment else char
+                                candidate = (new_segment, total_score)
+                                
+                                if len(dp[i]) < 20:
+                                    dp[i].append(candidate)
+                                else:
+                                    dp[i].append(candidate)
+                                    dp[i].sort(key=lambda x: x[1], reverse=True)
+                                    dp[i] = dp[i][:20]
+        
+        # 对结果进行排序，优先显示得分高的词语组合
+        if dp[n]:
+            dp[n].sort(key=lambda x: x[1], reverse=True)
+            # 只返回词语，不返回得分
+            return [segment for segment, score in dp[n]][:10]  # 限制返回数量
+        
+        return []
+
     def _get_word_score(self, word: str, pinyin: str) -> int:
         """获取词语的得分，用于排序。
         
@@ -430,6 +508,62 @@ class PinyinEngine:
             
         return base_score
 
+    def _calculate_crf_score(self, word: str, pinyin: str, prev_segment: str) -> float:
+        """计算词语在CRF模型中的得分，考虑多种上下文特征。
+        
+        Args:
+            word: 当前词语
+            pinyin: 对应的拼音
+            prev_segment: 前面的词语组合
+            
+        Returns:
+            词语得分，越高表示越可能
+        """
+        # 基础得分基于词频（如果词库中有词频信息）
+        base_score = self.dict_manager.get_word_frequency(word, pinyin)
+        
+        # 对数缩放，避免数值过大
+        import math
+        score = math.log(base_score + 1)
+        
+        # 长度加分：鼓励更长的词语
+        length_bonus = len(word) * 0.5
+        score += length_bonus
+        
+        # 如果是常用短语，给予额外加分
+        if pinyin in self.common_phrases and word in self.common_phrases[pinyin]:
+            # 根据在列表中的位置确定得分，越靠前得分越高
+            position = self.common_phrases[pinyin].index(word)
+            score += 10.0 - position * 1.0
+            
+        # 上下文特征：如果前一个词和当前词能组成常见搭配，加分
+        if prev_segment:
+            # 检查是否能组成常见双词搭配
+            bigram = prev_segment[-1] + word[0] if len(prev_segment) > 0 and len(word) > 0 else ""
+            if bigram in self._get_common_bigrams():
+                score += 2.0
+                
+        # 首字母大写加分（专有名词）
+        if word and word[0].isupper():
+            score += 1.0
+            
+        return score
+
+    def _get_common_bigrams(self) -> set:
+        """获取常见的双字搭配集合。
+        
+        Returns:
+            常见双字搭配集合
+        """
+        # 定义一些常见的双字搭配，用于上下文特征计算
+        return {
+            '你好', '什么', '怎么', '为什么', '因为', '所以', '但是', '然后', 
+            '的话', '什么', '时候', '现在', '今天', '明天', '昨天', '今年', 
+            '这个', '那个', '这些', '那些', '一些', '很多', '一点', '一下',
+            '一起', '一直', '一般', '一样', '一次', '一边', '一面', '一会儿',
+            '而且', '虽然', '如果', '即使', '尽管', '为了', '对于', '关于'
+        }
+
     def get_candidates(self, pinyin_str: str) -> List[str]:
         """根据拼音字符串获取候选词列表。
         
@@ -446,24 +580,41 @@ class PinyinEngine:
         Returns:
             候选汉字或词语的列表
         """
+        # 使用增强版的候选词获取方法
+        return self.get_candidates_enhanced(pinyin_str)
+
+    def get_candidates_enhanced(self, pinyin_str: str) -> List[str]:
+        """增强版候选词获取函数，结合多种策略提高长拼音处理能力。
+        
+        Args:
+            pinyin_str: 用户输入的拼音字符串
+            
+        Returns:
+            候选汉字或词语的列表
+        """
         if not pinyin_str:
             return []
         
         candidates = []
-
+        
         # 1. 检查是否是常用短语
         if pinyin_str in self.common_phrases:
             candidates.extend(self.common_phrases[pinyin_str])
         
-        # 2. 使用分词算法获取候选
+        # 2. 使用CRF增强算法获取候选（针对长拼音）
+        if len(pinyin_str) > 4:  # 对于较长的拼音，优先使用CRF算法
+            crf_candidates = self.segment_crf(pinyin_str)
+            candidates.extend(crf_candidates)
+        
+        # 3. 使用传统分词算法获取候选
         segmented_candidates = self.segment(pinyin_str)
         candidates.extend(segmented_candidates)
         
-        # 3. 检查自定义词典
+        # 4. 检查自定义词典
         dict_candidates = self.dict_manager.get_candidates(pinyin_str, -1)  # 获取所有候选词
         candidates.extend(dict_candidates)
         
-        # 4. 使用pypinyin获取单字候选
+        # 5. 使用pypinyin获取单字候选
         try:
             # 获取每个字符的拼音
             result = pinyin(pinyin_str, style=Style.NORMAL, heteronym=True)
@@ -481,7 +632,7 @@ class PinyinEngine:
         except Exception as e:
             print(f"Pypinyin error: {e}")
         
-        # 5. 添加硬编码的常用候选词
+        # 6. 添加硬编码的常用候选词
         common_mappings = {
             'ni': ['你', '尼', '泥'],
             'hao': ['好', '号', '毫'],
@@ -518,7 +669,7 @@ class PinyinEngine:
                 seen.add(candidate)
                 unique_candidates.append(candidate)
         
-        return unique_candidates  # 返回所有候选词，不限制数量
+        return unique_candidates[:30]  # 限制候选词数量
 
 
 if __name__ == '__main__':
