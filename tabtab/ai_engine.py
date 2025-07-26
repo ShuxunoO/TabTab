@@ -6,6 +6,8 @@ import re
 from ollama import Client
 from typing import List
 from PyQt6.QtCore import QObject, pyqtSignal, QRunnable, QThreadPool
+import datetime
+
 
 class AICompletionWorker(QRunnable):
     """在后台线程中运行AI补全的Worker。"""
@@ -23,17 +25,24 @@ class AICompletionWorker(QRunnable):
     def run(self):
         """执行AI补全任务。"""
         print("用户输入:", self.text)
+        
         try:
             client = Client()
+            datetime_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
             prompt = (
-                f"用户的输入是：‘{self.text}’，请继续补全或者回答剩下的对话，不要提供任何解释或多余的文字，只返回补全的内容，" + 
-                f"要求返1个string list，list中包含三个字符串，格式为：['response1', 'response2', 'response3']. " + 
-                f"注意：1. 只要3条内容，不能多也不能少；2. 3条内容要各不相同，尽可能差异化；" + 
-                f"3. 每条回复必须少于30个字；4. 用户很有可能会输入错别字和模糊拼音，根据你常识纠正补全的内容，"
+               """ 用户的输入是：‘{user_input}’，请继续补全或者回答剩下的对话，不要提供任何解释或多余的文字，只返回补全的内容。
+                要求返1个string list，list中包含三个字符串，格式为：['response1', 'response2', 'response3'].
+                注意：
+                1. 只要3条内容，不能多也不能少；
+                2. 3条内容要各不相同，尽可能差异化；
+                3. 每条回复必须少于30个字；
+                4. 用户很有可能会输入错别字和模糊拼音，根据你常识纠正补全的内容。
+                5. 当前的时间是：{datetime}。
+                """.format(user_input=self.text, datetime=datetime_str)
             )
 
             print("AI请求内容:", prompt)
-            response = client.chat(model='qwen2.5:0.5b', messages=[
+            response = client.chat(model='qwen2.5:3b', messages=[
                 {'role': 'user', 'content': prompt}
             ])
             
