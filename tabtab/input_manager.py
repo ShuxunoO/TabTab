@@ -102,8 +102,8 @@ class InputManager(QObject):
                 if 1 <= digit <= len(self.ai_completions):
                     return True
             
-            # 阻止Tab键、空格键、回车键
-            if key in [keyboard.Key.tab, keyboard.Key.space, keyboard.Key.enter]:
+            # 阻止空格键、回车键
+            if key in [keyboard.Key.space, keyboard.Key.enter]:
                 return True
 
             # 阻止方向键
@@ -118,8 +118,8 @@ class InputManager(QObject):
                 if 1 <= digit <= len(self.candidates):
                     return True
             
-            # 阻止Tab键、空格键、回车键
-            if key in [keyboard.Key.tab, keyboard.Key.space, keyboard.Key.enter]:
+            # 阻止空格键、回车键（注意：不再阻止Tab键）
+            if key in [keyboard.Key.space, keyboard.Key.enter]:
                 return True
 
             # 阻止方向键
@@ -310,7 +310,7 @@ class InputManager(QObject):
                     return True
                 return False
             
-            # 处理Tab键（确认第一个候选词）
+            # 处理Tab键（仅处理双击Tab）
             elif key == keyboard.Key.tab:
                 print(f"Tab key pressed - Active: {self.is_active}, Candidates: {len(self.candidates)}")
                 
@@ -326,28 +326,22 @@ class InputManager(QObject):
                 # 单击Tab事件，记录时间
                 self.last_tab_time = current_time
                 
-                # 处理单击Tab（确认第一个候选词）
-                if self.is_ai_mode and self.ai_completions:
-                    print(f"Tab selecting first AI completion: {self.ai_completions[0]}")
-                    self.select_candidate(0)
-                    return True  # 阻止Tab键传播
-                elif self.is_active and self.candidates:
-                    print(f"Tab selecting first candidate: {self.candidates[0]}")
-                    self.select_candidate(0)
-                    return True  # 阻止Tab键传播
-                else:
-                    print("Tab key - not in input mode or no candidates")
+                # 单击Tab不再确认候选词，直接返回
+                print("Tab key - single click, no action")
+                return False  # 让Tab键正常传播
             
             # 处理空格键（确认第一个候选词或输入空格）
             elif key == keyboard.Key.space:
                 if self.is_ai_mode and self.ai_completions:
+                    print(f"Space selecting first AI completion: {self.ai_completions[0]}")
                     self.select_candidate(0)
                     return True  # 阻止空格键传播
                 elif self.is_active and self.candidates:
+                    print(f"Space selecting first candidate: {self.candidates[0]}")
                     self.select_candidate(0)
                     return True  # 阻止空格键传播
                 else:
-                    # 让空格键正常传播
+                    # 让空格键正常传播（输入空格）
                     return False
             
             # 处理回车键（确认第一个候选词或换行）

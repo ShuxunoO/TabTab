@@ -29,18 +29,16 @@ class AICompletionWorker(QRunnable):
         try:
             client = Client()
             datetime_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-            prompt = (
-               """ 用户的输入是：‘{user_input}’，请继续补全或者回答剩下的对话，不要提供任何解释或多余的文字，只返回补全的内容。
-                要求返1个string list，list中包含三个字符串，格式为：['response1', 'response2', 'response3'].
-                注意：
-                1. 只要3条内容，不能多也不能少；
-                2. 3条内容要各不相同，尽可能差异化；
-                3. 每条回复必须少于30个字；
-                4. 用户很有可能会输入错别字和模糊拼音，根据你常识纠正补全的内容。
-                5. 当前的时间是：{datetime}。
-                """.format(user_input=self.text, datetime=datetime_str)
-            )
-
+            prompt = ("""你的原本输入是：‘{user_input}’，请你继续以第一人称用户的口吻继续补全这段和别人的对话，要求尽可能贴近真实用户的输入。
+                        要求和原本输入内容强相关，语气通顺自然，符合对话情景。不要提供任何解释或多余的文字，只返回补全的内容。
+                        要求返1个string list，list中包含三个字符串，格式为：['response1', 'response2', 'response3'].
+                        注意：
+                        1. 只要3条内容，不能多也不能少；
+                        2. 3条内容要各不相同，尽可能差异化；
+                        3. 每条回复必须50字以内；
+                        4. 用户很有可能会输入错别字和模糊拼音，根据你常识纠正补全的内容。
+                        5. 当前的时间是：{datetime}。""".format(user_input=self.text, datetime=datetime_str)
+                    )
             print("AI请求内容:", prompt)
             response = client.chat(model='qwen2.5:3b', messages=[
                 {'role': 'user', 'content': prompt}

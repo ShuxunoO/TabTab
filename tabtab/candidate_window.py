@@ -409,6 +409,12 @@ class CandidateWindow(QWidget):
         elif key == Qt.Key.Key_Up:
             if self.ai_suggestion_frame.isVisible():
                 self.select_previous_ai()  # 只有在AI模式下才允许上下键切换
+        elif key == Qt.Key.Key_Space:
+            # 空格键确认选择
+            if self.candidates:
+                self.candidate_selected.emit(self.selected_index)
+            elif self.ai_suggestions:
+                self.candidate_selected.emit(self.ai_selected_index)
         elif key == Qt.Key.Key_Return or key == Qt.Key.Key_Enter:
             if self.candidates:
                 self.candidate_selected.emit(self.selected_index)
