@@ -6,3 +6,5 @@ jieba
 pyautogui
 pywin32
 ollama
+# CRF 条件随机场依赖包
+python-crfsuite

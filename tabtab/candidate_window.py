@@ -148,6 +148,7 @@ class CandidateWindow(QWidget):
         for i, candidate in enumerate(candidates):
             label = QLabel(f"{i+1}.{candidate}")
             label.setObjectName(f"candidate_{i}")
+            # 使用默认参数方式捕获i的值，避免lambda闭包问题
             label.mousePressEvent = lambda event, idx=i: self.on_candidate_clicked(idx)
             
             self.candidate_labels.append(label)
@@ -192,6 +193,7 @@ class CandidateWindow(QWidget):
         for i, suggestion in enumerate(suggestions):
             label = QLabel(f"{i+1}. {suggestion}")
             label.setObjectName(f"aiSuggestion_{i}")
+            # 使用默认参数方式捕获i的值，避免lambda闭包问题
             label.mousePressEvent = lambda event, idx=i: self.on_ai_suggestion_clicked(idx)
             self.ai_suggestion_labels.append(label)
             self.ai_suggestion_layout.addWidget(label)
@@ -358,15 +360,21 @@ class CandidateWindow(QWidget):
         window_width = self.width()
         window_height = self.height()
         
+        # 处理右边缘情况
         if x + window_width > screen.width():
-            x = screen.width() - window_width
-        if y + window_height > screen.height():
-            y = y - window_height - 30
-        
+            x = screen.width() - window_width - 5  # 距离右边缘5px
+            
+        # 处理左边缘情况
         if x < 0:
-            x = 0
+            x = 5  # 距离左边缘5px
+            
+        # 处理下边缘情况
+        if y + window_height > screen.height():
+            y = screen.height() - window_height - 5  # 距离下边缘5px
+            
+        # 处理上边缘情况
         if y < 0:
-            y = 0
+            y = 5  # 距离上边缘5px
             
         self.move(x, y)
     
@@ -398,11 +406,17 @@ class CandidateWindow(QWidget):
         key = event.key()
         
         if key == Qt.Key.Key_Right:
-            if not self.ai_suggestion_frame.isVisible():
-                self.select_next()  # 只有在非AI模式下才允许左右键切换
+            if not self.ai_suggestion_frame.isVisible() and self.candidates:
+                if not self.select_next():  # 成功切换到下一个候选词
+                    return
+            elif self.ai_suggestion_frame.isVisible() and self.ai_suggestions:
+                self.select_next_ai()
         elif key == Qt.Key.Key_Left:
-            if not self.ai_suggestion_frame.isVisible():
-                self.select_previous()  # 只有在非AI模式下才允许左右键切换
+            if not self.ai_suggestion_frame.isVisible() and self.candidates:
+                if not self.select_previous():  # 成功切换到上一个候选词
+                    return
+            elif self.ai_suggestion_frame.isVisible() and self.ai_suggestions:
+                self.select_previous_ai()
         elif key == Qt.Key.Key_Down:
             if self.ai_suggestion_frame.isVisible():
                 self.select_next_ai()  # 只有在AI模式下才允许上下键切换
@@ -411,14 +425,14 @@ class CandidateWindow(QWidget):
                 self.select_previous_ai()  # 只有在AI模式下才允许上下键切换
         elif key == Qt.Key.Key_Space:
             # 空格键确认选择
-            if self.candidates:
+            if self.candidates and not self.ai_suggestion_frame.isVisible():
                 self.candidate_selected.emit(self.selected_index)
-            elif self.ai_suggestions:
+            elif self.ai_suggestions and self.ai_suggestion_frame.isVisible():
                 self.candidate_selected.emit(self.ai_selected_index)
         elif key == Qt.Key.Key_Return or key == Qt.Key.Key_Enter:
-            if self.candidates:
+            if self.candidates and not self.ai_suggestion_frame.isVisible():
                 self.candidate_selected.emit(self.selected_index)
-            elif self.ai_suggestions:
+            elif self.ai_suggestions and self.ai_suggestion_frame.isVisible():
                 self.candidate_selected.emit(self.ai_selected_index)
         elif key == Qt.Key.Key_Escape:
             self.hide()

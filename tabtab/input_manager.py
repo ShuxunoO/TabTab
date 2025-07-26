@@ -183,8 +183,14 @@ class InputManager(QObject):
         
         # 优先使用当前激活的输入
         if self.is_active and self.pinyin_buffer:
-            first_candidate = self.candidates[0] if self.candidates else ""
-            text_for_ai = f"{self.pinyin_buffer} {first_candidate}"
+            # 使用当前选中的候选词而不是总是第一个候选词
+            selected_candidate = self.candidate_window.get_selected_candidate() if self.candidates else ""
+            if not selected_candidate and self.candidates:
+                # 如果无法获取选中的候选词，使用当前选中索引对应的候选词
+                if 0 <= self.candidate_window.selected_index < len(self.candidates):
+                    selected_candidate = self.candidates[self.candidate_window.selected_index]
+            
+            text_for_ai = f"{self.pinyin_buffer} {selected_candidate}"
         # 如果没有当前输入，尝试使用最近输入的内容
         elif self.last_input_text:
             # 如果有最近输入的拼音，使用拼音+文本
@@ -281,21 +287,43 @@ class InputManager(QObject):
             
             # 处理方向键（选择候选词和翻页）
             elif key == keyboard.Key.left:
-                if self.is_active and self.candidates and not self.is_ai_mode:
-                    self.candidate_window.select_previous()
-                    return True
-                elif self.is_active and self.candidates and self.is_ai_mode:
-                    self.candidate_window.select_previous()
-                    return True
+                if self.is_active and self.candidates:
+                    # 在AI模式下，只处理AI建议的选择
+                    if self.is_ai_mode and self.ai_completions:
+                        if not self.candidate_window.select_previous_ai():
+                            return True
+                    # 在普通模式下，处理候选词选择和翻页
+                    elif not self.is_ai_mode:
+                        # 检查是否在第一页的第一个候选词，如果不是，则正常选择上一个
+                        if not self.candidate_window.is_at_beginning():
+                            self.candidate_window.select_previous()
+                            return True
+                        # 如果在第一页的第一个候选词，尝试翻到上一页
+                        elif self.current_page > 0:
+                            if self.previous_page():
+                                self.candidate_window.select_last()
+                                return True
                 return False
                 
             elif key == keyboard.Key.right:
-                if self.is_active and self.candidates and not self.is_ai_mode:
-                    self.candidate_window.select_next()
-                    return True
-                elif self.is_active and self.candidates and self.is_ai_mode:
-                    self.candidate_window.select_next()
-                    return True
+                if self.is_active and self.candidates:
+                    # 在AI模式下，只处理AI建议的选择
+                    if self.is_ai_mode and self.ai_completions:
+                        if not self.candidate_window.select_next_ai():
+                            return True
+                    # 在普通模式下，处理候选词选择和翻页
+                    elif not self.is_ai_mode:
+                        # 检查是否在最后一页的最后一个候选词，如果不是，则正常选择下一个
+                        if not self.candidate_window.is_at_end():
+                            self.candidate_window.select_next()
+                            return True
+                        # 如果在最后一页的最后一个候选词，尝试翻到下一页
+                        else:
+                            max_page = (len(self.full_candidates) + self.page_size - 1) // self.page_size - 1
+                            if self.current_page < max_page:
+                                if self.next_page():
+                                    self.candidate_window.select_first()
+                                    return True
                 return False
                 
             elif key == keyboard.Key.up:
@@ -625,7 +653,8 @@ class InputManager(QObject):
         """移动候选词窗口到光标位置附近。"""
         try:
             x, y = self.get_cursor_position()
-            self.candidate_window.move_window(x, y + 25)  # 显示在光标下方
+            # 将候选词窗口显示在鼠标指针的左下方5px处
+            self.candidate_window.move_window(x - 5, y + 5)
         except Exception as e:
             print(f"Error moving candidate window: {e}")
             # 使用默认位置

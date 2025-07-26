@@ -29,7 +29,7 @@ class AICompletionWorker(QRunnable):
         try:
             client = Client()
             datetime_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-            prompt = ("""你的原本输入是：‘{user_input}’，请你继续以第一人称用户的口吻继续补全这段和别人的对话，要求尽可能贴近真实用户的输入。
+            prompt = ("""我的原本输入是：‘{user_input}’，请你继续以我的口吻继续补全这段和别人的对话，要求尽可能贴近真实用户的输入。
                         要求和原本输入内容强相关，语气通顺自然，符合对话情景。不要提供任何解释或多余的文字，只返回补全的内容。
                         要求返1个string list，list中包含三个字符串，格式为：['response1', 'response2', 'response3'].
                         注意：
@@ -40,7 +40,7 @@ class AICompletionWorker(QRunnable):
                         5. 当前的时间是：{datetime}。""".format(user_input=self.text, datetime=datetime_str)
                     )
             print("AI请求内容:", prompt)
-            response = client.chat(model='qwen2.5:3b', messages=[
+            response = client.chat(model='qwen2.5:1.5b', messages=[
                 {'role': 'user', 'content': prompt}
             ])
             
